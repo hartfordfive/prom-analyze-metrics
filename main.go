@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 
@@ -13,8 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil/promlint"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-
-	"text/tabwriter"
 )
 
 const (
@@ -36,9 +32,9 @@ var (
 )
 
 type metricStat struct {
-	name        string
-	cardinality int
-	percentage  float64
+	Name        string
+	Cardinality int
+	Percentage  float64
 }
 
 func setupRouter() *gin.Engine {
@@ -52,30 +48,40 @@ func setupRouter() *gin.Engine {
 		c.String(http.StatusOK, "OK")
 	})
 
-	// Get user value
 	r.GET("/analyze", func(c *gin.Context) {
 
-		outputLinting := ""
-		outputCardinality := ""
+		//outputLinting := ""
 
 		url := c.Query("url")
 
-		fmt.Println("URL: ", url)
+		//fmt.Println("URL: ", url)
 
-		if checkLink {
-			_, err := checkMetricsLint(url)
-			if err != nil {
-				outputLinting = fmt.Sprintf("error while linting:", err)
+		problems, err := checkMetricsLint(url)
+		if err != nil {
+			c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+				"resultLinting":     "",
+				"resultCardinality": "",
+				"totalMetrics":      "",
+				"error":             err.Error(),
+			})
+		}
 
-			}
+		resp, err := getContents(url)
+		if err != nil {
+			c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+				"resultLinting":     "",
+				"resultCardinality": "",
+				"totalMetrics":      "",
+				"error":             err.Error(),
+			})
 		}
-		if checkCardinality {
-			_, outputCardinality = checkMetricsExtended(url)
-		}
+
+		stats, total, err := checkExtended(resp)
 
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
-			"resultLinting":     outputLinting,
-			"resultCardinality": outputCardinality,
+			"lintingProblems":   problems,
+			"resultCardinality": stats,
+			"totalMetrics":      total,
 		})
 
 	})
@@ -83,19 +89,11 @@ func setupRouter() *gin.Engine {
 	return r
 }
 
-func main() {
-
-	r := setupRouter()
-	// Listen and Server in 0.0.0.0:8080
-	r.Run(":8080")
-}
-
 func getContents(url string) (io.ReadCloser, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("GET error: %v", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status error: %v", resp.StatusCode)
@@ -104,47 +102,22 @@ func getContents(url string) (io.ReadCloser, error) {
 
 }
 
-func checkMetricsLint(url string) (int, error) {
+func checkMetricsLint(url string) ([]promlint.Problem, error) {
 
 	resp, err := getContents(url)
+	if err != nil {
+		return []promlint.Problem{}, err
+	}
 
 	l := promlint.New(resp)
 	problems, err := l.Lint()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error while linting:", err)
-		return failureExitCode, err
+		//fmt.Fprintln(os.Stderr, "error while linting:", err)
+		return []promlint.Problem{}, err
 	}
 
-	for _, p := range problems {
-		fmt.Fprintln(os.Stderr, p.Metric, p.Text)
-	}
+	return problems, nil
 
-	if len(problems) > 0 {
-		return lintErrExitCode, nil
-	}
-
-	return successExitCode, nil
-}
-
-func checkMetricsExtended(url string) (int, string) {
-	var buf bytes.Buffer
-	stats, total, err := checkExtended(&buf)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return failureExitCode, ""
-	}
-	w := tabwriter.NewWriter(os.Stdout, 4, 4, 4, ' ', tabwriter.TabIndent)
-	//fmt.Sprintf(w, "Metric\tCardinality\tPercentage\t\n")
-	sb.WriteString("Metric\tCardinality\tPercentage\t\n")
-	for _, stat := range stats {
-		//fmt.Sprintf(w, "%s\t%d\t%.2f%%\t\n", stat.name, stat.cardinality, stat.percentage*100)
-		sb.WriteString(fmt.Sprintf("%s\t%d\t%.2f%%\t\n", stat.name, stat.cardinality, stat.percentage*100))
-	}
-	//fmt.Sprintf(w, "Total\t%d\t%.f%%\t\n", total, 100.)
-	sb.WriteString(fmt.Sprintf("Total\t%d\t%.f%%\t\n", total, 100.))
-	w.Flush()
-
-	return successExitCode, sb.String()
 }
 
 func checkExtended(r io.Reader) ([]metricStat, int, error) {
@@ -172,17 +145,23 @@ func checkExtended(r io.Reader) ([]metricStat, int, error) {
 		default:
 			cardinality = len(mf.Metric)
 		}
-		stats = append(stats, metricStat{name: mf.GetName(), cardinality: cardinality})
+		stats = append(stats, metricStat{Name: mf.GetName(), Cardinality: cardinality})
 		total += cardinality
 	}
 
 	for i := range stats {
-		stats[i].percentage = float64(stats[i].cardinality) / float64(total)
+		stats[i].Percentage = float64(stats[i].Cardinality) / float64(total)
 	}
 
 	sort.SliceStable(stats, func(i, j int) bool {
-		return stats[i].cardinality > stats[j].cardinality
+		return stats[i].Cardinality > stats[j].Cardinality
 	})
 
 	return stats, total, nil
+}
+
+func main() {
+
+	r := setupRouter()
+	r.Run(":8080")
 }

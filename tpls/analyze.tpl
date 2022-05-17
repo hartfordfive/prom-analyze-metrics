@@ -17,6 +17,16 @@
 
     <!-- Optional theme -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+ 
+    <style  rel="stylesheet" type="text/css">
+      table, th, td {
+        border: 1px solid;
+        padding-left: 1em;
+        padding-right: 1em;
+        text-align: center;
+      }
+    </style>
+    
   </head>
 
   <body>
@@ -26,12 +36,58 @@
       <div class="starter-template">
         <h1>Linting Stats</h1>
         <p class="lead">
-          {{ .resultLinting }}
+          {{ if .lintingProblems }}
+            {{ .lintingProblems }}
+            {{ range $key, $p := .lintingProblems }}
+
+            {{ end }}
+
+
+
+          <table class="table-results">
+            <tr>
+              <th>Metric Name</th>
+              <th>Problem</th>
+            </tr>
+          {{ range $key, $p := .lintingProblems }}
+            <tr>
+              <td><strong>{{ $p.Metric }}</strong></td>
+              <td>{{ $p.Text }}</td>
+            </tr>
+          {{ end }}
+          </table>
+
+
+
+          {{ else }}
+            No linting problems found.
+          {{ end }}
         </p>
         <br/><br/>
         <h1>Cardinality Stats</h1>
         <p class="lead">
-          {{ .resultCardinality }}
+          <table class="table-results">
+            <tr>
+              <th>Metric Name</th>
+              <th>Cardinality</th>
+              <th>Total Percentage</th>
+            </tr>
+          {{ range $key, $value := .resultCardinality }}
+            <tr>
+              <td><strong>{{ $value.Name }}</strong></td>
+              <td>{{ $value.Cardinality }}</td>
+              <td>{{ printf "%.2f" $value.Percentage }}</td>
+            </tr>
+          {{ end }}
+          <tr>
+              <td colspan="3" style="padding: 1em;"></td>
+          </tr>
+          <tr>
+              <td style="text-align: right; font-size: 1.4em;">Total Metrics</td>
+              <td style="text-align: center; font-size: 1.4em;"><strong>{{ .totalMetrics }}</strong></td>
+              <td></td>
+          </tr>
+          </table>
         </p>
       </div>
 
