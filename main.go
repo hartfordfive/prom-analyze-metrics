@@ -136,6 +136,7 @@ func setupRouter() *gin.Engine {
 		resp, err := getContents(url)
 
 		u, err := urlparse.Parse(url)
+
 		if err != nil {
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
@@ -143,7 +144,7 @@ func setupRouter() *gin.Engine {
 			})
 		}
 
-		contentFileName := fmt.Sprintf("%x_%s.prom", md5.Sum([]byte(url)), u.Hostname)
+		contentFileName := fmt.Sprintf("%x_%s:%s.prom", md5.Sum([]byte(url)), u.Hostname(), u.Port())
 		cacheFilePath := filepath.Join(flagCacheDir, contentFileName)
 
 		err = os.MkdirAll(flagCacheDir, os.ModePerm)
