@@ -29,9 +29,9 @@ const (
 )
 
 var (
-	url              string = "http://localhost:9100/metrics"
-	checkLink        bool   = false
-	checkCardinality bool   = true
+	//url              string = "http://localhost:9100/metrics"
+	checkLink        bool = false
+	checkCardinality bool = true
 	sb               strings.Builder
 )
 
@@ -59,6 +59,9 @@ func setupRouter() *gin.Engine {
 		outputCardinality := ""
 
 		url := c.Query("url")
+
+		fmt.Println("URL: ", url)
+
 		if checkLink {
 			_, err := checkMetricsLint(url)
 			if err != nil {
