@@ -26,18 +26,32 @@
         text-align: center;
       }
     </style>
+
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
     
   </head>
 
   <body>
 
+
+   <div class="container-summary" style="padding: 2em;">
+    <h1>Notice</h1>
+    <p class="lead" style="text-align: left; font-size: 1.4em;">
+      Total linting warnings: <strong>{{ .totalLintingProblems }}</strong><br/>
+      Total metrics: <strong>{{ .totalMetrics }}</strong>
+    </p><br/>
+   </div>
+
+   <hr/>
+
     <div class="container">
 
       <div class="starter-template">
 
-        <div class="header"><h1>Linting Stats</h1></div>
-        <div class="content">
-
+        <div class="headerLinting"><h1>Linting Stats</h1> (click to show/hide)</div>
+        <div class="hideLinting" style="display:none" >
           
           <p class="lead">
             {{ if .lintingProblems }}
@@ -62,36 +76,46 @@
         </div> <!-- END OF DIF content -->
         <br/><br/>
 
+        <div class="headerCardinality"><h1>Cardinality Stats</h1> (click to show/hide)</div>
+        <div class="hideCardinality" style="display:none" >
 
-        <h1>Cardinality Stats</h1>
-        <p class="lead">
-          <table class="table-results">
+          <p class="lead">
+            <table class="table-results">
+              <tr>
+                <th>Metric Name</th>
+                <th>Cardinality</th>
+                <th>Total Percentage</th>
+              </tr>
+            {{ range $key, $value := .resultCardinality }}
+              <tr>
+                <td><strong>{{ $value.Name }}</strong></td>
+                <td>{{ $value.Cardinality }}</td>
+                <td>{{ printf "%.2f" $value.Percentage }}</td>
+              </tr>
+            {{ end }}
             <tr>
-              <th>Metric Name</th>
-              <th>Cardinality</th>
-              <th>Total Percentage</th>
+                <td colspan="3" style="padding: 1em;"></td>
             </tr>
-          {{ range $key, $value := .resultCardinality }}
             <tr>
-              <td><strong>{{ $value.Name }}</strong></td>
-              <td>{{ $value.Cardinality }}</td>
-              <td>{{ printf "%.2f" $value.Percentage }}</td>
+                <td style="text-align: right; font-size: 1.4em;">Total Metrics</td>
+                <td style="text-align: center; font-size: 1.4em;"><strong>{{ .totalMetrics }}</strong></td>
+                <td></td>
             </tr>
-          {{ end }}
-          <tr>
-              <td colspan="3" style="padding: 1em;"></td>
-          </tr>
-          <tr>
-              <td style="text-align: right; font-size: 1.4em;">Total Metrics</td>
-              <td style="text-align: center; font-size: 1.4em;"><strong>{{ .totalMetrics }}</strong></td>
-              <td></td>
-          </tr>
-          </table>
-        </p>
+            </table>
+          </p>
+        </div>
       </div>
 
     </div><!-- /.container -->
 
+    <script>
+      $('.headerLinting').click(function(){
+          $('.hideLinting').toggle();
+      });
+      $('.headerCardinality').click(function(){
+          $('.hideCardinality').toggle();
+      });
+    </script>
 
     <!-- Bootstrap core JavaScript
     ================================================== -->
