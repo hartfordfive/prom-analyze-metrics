@@ -47,6 +47,7 @@ var (
 	flagCacheDir     string
 	flagHost         string
 	flagPort         string
+	flagTplDir       string
 )
 
 type metricStat struct {
@@ -121,7 +122,7 @@ func setupRouter() *gin.Engine {
 		"bytesToHuman":      bytesToHuman,
 	})
 
-	r.LoadHTMLFiles("./tpls/analyze.tpl")
+	r.LoadHTMLFiles(filepath.Join(flagTplDir, "analyze.tpl"))
 
 	r.GET("/status", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
@@ -281,6 +282,7 @@ func checkExtended(r io.Reader) ([]metricStat, int, error) {
 func main() {
 
 	flag.StringVar(&flagCacheDir, "cachedir", "/tmp/prom-analyze-metrics-ui", "The path to the cache directory")
+	flag.StringVar(&flagTplDir, "tpldir", "tpls/", "The path to html templates")
 	flag.StringVar(&flagHost, "host", "", "Host on which to serve the web app")
 	flag.StringVar(&flagPort, "port", "8080", "Port on which to serve the web app")
 	flag.Parse()
