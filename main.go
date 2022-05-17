@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/testutil/promlint"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -30,6 +32,7 @@ var (
 	url              string = "http://localhost:9100/metrics"
 	checkLink        bool   = false
 	checkCardinality bool   = true
+	sb               strings.Builder
 )
 
 type metricStat struct {
@@ -38,33 +41,71 @@ type metricStat struct {
 	percentage  float64
 }
 
-func main() {
+func setupRouter() *gin.Engine {
+	// Disable Console Color
+	// gin.DisableConsoleColor()
+	r := gin.Default()
 
-	if checkLink {
-		status, err := checkMetricsLint(url)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error while linting:", err)
-			os.Exit(status)
+	r.LoadHTMLFiles("./tpls/analyze.tpl")
+
+	r.GET("/status", func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
+
+	// Get user value
+	r.GET("/analyze", func(c *gin.Context) {
+
+		outputLinting := ""
+		outputCardinality := ""
+
+		url := c.Query("url")
+		if checkLink {
+			_, err := checkMetricsLint(url)
+			if err != nil {
+				outputLinting = fmt.Sprintf("error while linting:", err)
+
+			}
 		}
-	}
-	if checkCardinality {
-		os.Exit(checkMetricsExtended())
-	}
+		if checkCardinality {
+			_, outputCardinality = checkMetricsExtended(url)
+		}
+
+		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+			"resultLinting":     outputLinting,
+			"resultCardinality": outputCardinality,
+		})
+
+	})
+
+	return r
 }
 
-func checkMetricsLint(url string) (int, error) {
+func main() {
 
+	r := setupRouter()
+	// Listen and Server in 0.0.0.0:8080
+	r.Run(":8080")
+}
+
+func getContents(url string) (io.ReadCloser, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return failureExitCode, fmt.Errorf("GET error: %v", err)
+		return nil, fmt.Errorf("GET error: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return failureExitCode, fmt.Errorf("status error: %v", resp.StatusCode)
+		return nil, fmt.Errorf("status error: %v", resp.StatusCode)
 	}
+	return resp.Body, nil
 
-	l := promlint.New(resp.Body)
+}
+
+func checkMetricsLint(url string) (int, error) {
+
+	resp, err := getContents(url)
+
+	l := promlint.New(resp)
 	problems, err := l.Lint()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error while linting:", err)
@@ -82,22 +123,25 @@ func checkMetricsLint(url string) (int, error) {
 	return successExitCode, nil
 }
 
-func checkMetricsExtended() int {
+func checkMetricsExtended(url string) (int, string) {
 	var buf bytes.Buffer
 	stats, total, err := checkExtended(&buf)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return failureExitCode
+		return failureExitCode, ""
 	}
 	w := tabwriter.NewWriter(os.Stdout, 4, 4, 4, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(w, "Metric\tCardinality\tPercentage\t\n")
+	//fmt.Sprintf(w, "Metric\tCardinality\tPercentage\t\n")
+	sb.WriteString("Metric\tCardinality\tPercentage\t\n")
 	for _, stat := range stats {
-		fmt.Fprintf(w, "%s\t%d\t%.2f%%\t\n", stat.name, stat.cardinality, stat.percentage*100)
+		//fmt.Sprintf(w, "%s\t%d\t%.2f%%\t\n", stat.name, stat.cardinality, stat.percentage*100)
+		sb.WriteString(fmt.Sprintf("%s\t%d\t%.2f%%\t\n", stat.name, stat.cardinality, stat.percentage*100))
 	}
-	fmt.Fprintf(w, "Total\t%d\t%.f%%\t\n", total, 100.)
+	//fmt.Sprintf(w, "Total\t%d\t%.f%%\t\n", total, 100.)
+	sb.WriteString(fmt.Sprintf("Total\t%d\t%.f%%\t\n", total, 100.))
 	w.Flush()
 
-	return successExitCode
+	return successExitCode, sb.String()
 }
 
 func checkExtended(r io.Reader) ([]metricStat, int, error) {
