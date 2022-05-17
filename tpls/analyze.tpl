@@ -34,36 +34,35 @@
     <div class="container">
 
       <div class="starter-template">
-        <h1>Linting Stats</h1>
-        <p class="lead">
-          {{ if .lintingProblems }}
-            {{ .lintingProblems }}
+
+        <div class="header"><h1>Linting Stats</h1></div>
+        <div class="content">
+
+          
+          <p class="lead">
+            {{ if .lintingProblems }}
+            <table class="table-results">
+              <tr>
+                <th>Metric Name</th>
+                <th>Problem</th>
+              </tr>
             {{ range $key, $p := .lintingProblems }}
-
+              <tr>
+                <td><strong>{{ $p.Metric }}</strong></td>
+                <td style="font-size: 1.2em;">{{ $p.Text }}</td>
+              </tr>
             {{ end }}
+            </table>
+            {{ else }}
+              No linting problems found.
+            {{ end }}
+          </p>
 
 
-
-          <table class="table-results">
-            <tr>
-              <th>Metric Name</th>
-              <th>Problem</th>
-            </tr>
-          {{ range $key, $p := .lintingProblems }}
-            <tr>
-              <td><strong>{{ $p.Metric }}</strong></td>
-              <td>{{ $p.Text }}</td>
-            </tr>
-          {{ end }}
-          </table>
-
-
-
-          {{ else }}
-            No linting problems found.
-          {{ end }}
-        </p>
+        </div> <!-- END OF DIF content -->
         <br/><br/>
+
+
         <h1>Cardinality Stats</h1>
         <p class="lead">
           <table class="table-results">

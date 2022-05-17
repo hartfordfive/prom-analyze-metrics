@@ -78,6 +78,8 @@ func setupRouter() *gin.Engine {
 
 		stats, total, err := checkExtended(resp)
 
+		fmt.Println(stats)
+
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
 			"lintingProblems":   problems,
 			"resultCardinality": stats,
