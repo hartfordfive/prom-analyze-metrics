@@ -1,16 +1,30 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/md5"
+	"flag"
 	"fmt"
+	"html/template"
 	"io"
+	"io/ioutil"
+	"log"
+	"math"
 	"net/http"
+	urlparse "net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/testutil/promlint"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"go.uber.org/multierr"
 )
 
 const (
@@ -19,16 +33,20 @@ const (
 	// Exit code 3 is used for "one or more lint issues detected".
 	lintErrExitCode = 3
 
-	lintOptionAll            = "all"
-	lintOptionDuplicateRules = "duplicate-rules"
-	lintOptionNone           = "none"
+	lintOptionAll                = "all"
+	lintOptionDuplicateRules     = "duplicate-rules"
+	lintOptionNone               = "none"
+	dirData                      = "tmp/"
+	chunksize                int = 1024
 )
 
 var (
-	//url              string = "http://localhost:9100/metrics"
 	checkLink        bool = false
 	checkCardinality bool = true
 	sb               strings.Builder
+	flagCacheDir     string
+	flagHost         string
+	flagPort         string
 )
 
 type metricStat struct {
@@ -37,10 +55,71 @@ type metricStat struct {
 	Percentage  float64
 }
 
+func floatToPercentage(x float64) float64 {
+	return math.Round(x * 100)
+}
+
+func bytesToHuman(size int64) string {
+	return humanize.Bytes(uint64(size))
+}
+
+func readCacheFile(filename string) (byteCount int, buffer *bytes.Buffer) {
+
+	var data *os.File
+	var part []byte
+	var err error
+	var count int
+
+	data, err = os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer data.Close()
+
+	reader := bufio.NewReader(data)
+	buffer = bytes.NewBuffer(make([]byte, 0))
+	part = make([]byte, chunksize)
+
+	for {
+		if count, err = reader.Read(part); err != nil {
+			break
+		}
+		buffer.Write(part[:count])
+	}
+	if err != io.EOF {
+		log.Fatal("Error Reading ", filename, ": ", err)
+	} else {
+		err = nil
+	}
+
+	return buffer.Len(), buffer
+
+}
+
+// ----------------------------
+
 func setupRouter() *gin.Engine {
 	// Disable Console Color
-	// gin.DisableConsoleColor()
+	gin.DisableConsoleColor()
 	r := gin.Default()
+	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
+			param.ClientIP,
+			param.TimeStamp.Format(time.RFC1123),
+			param.Method,
+			param.Path,
+			param.Request.Proto,
+			param.StatusCode,
+			param.Latency,
+			param.Request.UserAgent(),
+			param.ErrorMessage,
+		)
+	}))
+	//r.Delims("{[{", "}]}")
+	r.SetFuncMap(template.FuncMap{
+		"floatToPercentage": floatToPercentage,
+		"bytesToHuman":      bytesToHuman,
+	})
 
 	r.LoadHTMLFiles("./tpls/analyze.tpl")
 
@@ -50,35 +129,67 @@ func setupRouter() *gin.Engine {
 
 	r.GET("/analyze", func(c *gin.Context) {
 
-		//outputLinting := ""
+		var err error
 
 		url := c.Query("url")
-
-		//fmt.Println("URL: ", url)
-
-		problems, err := checkMetricsLint(url)
-		if err != nil {
-			c.HTML(http.StatusOK, "analyze.tpl", gin.H{
-				"resultLinting":     "",
-				"resultCardinality": "",
-				"totalMetrics":      "",
-				"error":             err.Error(),
-			})
-		}
-
 		resp, err := getContents(url)
+
+		u, err := urlparse.Parse(url)
 		if err != nil {
-			c.HTML(http.StatusOK, "analyze.tpl", gin.H{
-				"resultLinting":     "",
-				"resultCardinality": "",
-				"totalMetrics":      "",
-				"error":             err.Error(),
+			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": err,
 			})
 		}
 
-		stats, total, err := checkExtended(resp)
+		contentFileName := fmt.Sprintf("%x_%s.prom", md5.Sum([]byte(url)), u.Hostname)
+		cacheFilePath := filepath.Join(flagCacheDir, contentFileName)
+
+		err = os.MkdirAll(flagCacheDir, os.ModePerm)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": err,
+			})
+		}
+		out, err := os.Create(cacheFilePath)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": err,
+			})
+		}
+		defer out.Close()
+		nBytes, err := io.Copy(out, resp.Body)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": err,
+			})
+		}
+
+		_, buffer := readCacheFile(cacheFilePath)
+		resp.Body = ioutil.NopCloser(buffer)
+
+		problems, err := checkMetricsLint(resp.Body)
+		if err != nil {
+			if err := os.Remove(cacheFilePath); err != nil {
+				err = multierr.Append(err, err)
+				c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+					"url":   url,
+					"error": err.Error(),
+				})
+			}
+		}
+
+		_, buffer = readCacheFile(cacheFilePath)
+		resp.Body = ioutil.NopCloser(buffer)
+
+		stats, total, err := checkExtended(resp.Body)
 
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+			"url":                  url,
+			"transferSize":         nBytes,
 			"totalLintingProblems": len(problems),
 			"lintingProblems":      problems,
 			"resultCardinality":    stats,
@@ -90,30 +201,36 @@ func setupRouter() *gin.Engine {
 	return r
 }
 
-func getContents(url string) (io.ReadCloser, error) {
-	resp, err := http.Get(url)
+func getContents(url string) (*http.Response, error) {
+
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("GET error: %v", err)
+		log.Fatalln(err)
 	}
+
+	req.Header.Set("User-Agent", "Prometheus Web Metric Analyzer/0.1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Code:", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status error: %v", resp.StatusCode)
 	}
-	return resp.Body, nil
+	return resp, nil
 
 }
 
-func checkMetricsLint(url string) ([]promlint.Problem, error) {
-
-	resp, err := getContents(url)
-	if err != nil {
-		return []promlint.Problem{}, err
-	}
+func checkMetricsLint(resp io.Reader) ([]promlint.Problem, error) {
 
 	l := promlint.New(resp)
 	problems, err := l.Lint()
 	if err != nil {
-		//fmt.Fprintln(os.Stderr, "error while linting:", err)
 		return []promlint.Problem{}, err
 	}
 
@@ -163,6 +280,11 @@ func checkExtended(r io.Reader) ([]metricStat, int, error) {
 
 func main() {
 
+	flag.StringVar(&flagCacheDir, "cachedir", "/tmp/prom-analyze-metrics-ui", "The path to the cache directory")
+	flag.StringVar(&flagHost, "host", "", "Host on which to serve the web app")
+	flag.StringVar(&flagPort, "port", "8080", "Port on which to serve the web app")
+	flag.Parse()
+
 	r := setupRouter()
-	r.Run(":8080")
+	r.Run(fmt.Sprintf("%s:%s", flagHost, flagPort))
 }
