@@ -51,21 +51,29 @@
         background-color: #ffffff;
       }
 
-      summary-item {
-        text-align: right:
-        padding-left: 1.2em;
-        padding-right: 1.2em;
-        width: 450px;
-        font-size: 1.4em;
+      input[type=text], select {
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
       }
 
-      summary-value {
-        text-align: left:
-        padding-left: 1.2em;
-        padding-right: 1.2em;
-        min-width: 350px;
-        float: left;
-        font-weight: bold;
+      input[type=submit] {
+        width: 100%;
+        background-color: #4CAF50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      input[type=submit]:hover {
+        background-color: #45a049;
       }
     </style>
 
@@ -77,8 +85,8 @@
 
   <body>
 
-
    <div class="container-summary" style="padding: 2em;">
+
     <h1>Prometheus Metrics Endpoint Summary</h1>
     <p class="lead" style="text-align: left; font-size: 1.2em;">
         <table>

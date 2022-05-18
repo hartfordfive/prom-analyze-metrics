@@ -122,17 +122,26 @@ func setupRouter() *gin.Engine {
 		"bytesToHuman":      bytesToHuman,
 	})
 
-	r.LoadHTMLFiles(filepath.Join(flagTplDir, "analyze.tpl"))
+	r.LoadHTMLFiles(
+		filepath.Join(flagTplDir, "analyze.tpl"),
+		filepath.Join(flagTplDir, "analyze_get.tpl"),
+	)
 
 	r.GET("/status", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})
 
 	r.GET("/analyze", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "analyze_get.tpl", gin.H{})
+	})
+
+	r.POST("/analyze", func(c *gin.Context) {
 
 		var err error
 
-		url := c.Query("url")
+		//url := c.Query("url")
+		url := c.PostForm("url")
+
 		resp, err := getContents(url)
 
 		u, err := urlparse.Parse(url)
@@ -184,7 +193,7 @@ func setupRouter() *gin.Engine {
 			}
 		}
 
-		_, buffer = readCacheFile(cacheFilePath)
+		//_, buffer = readCacheFile(cacheFilePath)
 		resp.Body = ioutil.NopCloser(buffer)
 
 		stats, total, err := checkExtended(resp.Body)
@@ -218,8 +227,6 @@ func getContents(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("Code:", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status error: %v", resp.StatusCode)
