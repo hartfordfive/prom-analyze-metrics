@@ -158,21 +158,25 @@ func setupRouter() *gin.Engine {
 
 		err = os.MkdirAll(flagCacheDir, os.ModePerm)
 		if err != nil {
+			err = multierr.Append(err, err)
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
 				"error": err,
 			})
 		}
 		out, err := os.Create(cacheFilePath)
+		defer out.Close()
 		if err != nil {
+			err = multierr.Append(err, err)
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
 				"error": err,
 			})
 		}
-		defer out.Close()
+
 		nBytes, err := io.Copy(out, resp.Body)
 		if err != nil {
+			err = multierr.Append(err, err)
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
 				"error": err,
@@ -193,10 +197,20 @@ func setupRouter() *gin.Engine {
 			}
 		}
 
-		//_, buffer = readCacheFile(cacheFilePath)
+		_, buffer = readCacheFile(cacheFilePath)
 		resp.Body = ioutil.NopCloser(buffer)
 
 		stats, total, err := checkExtended(resp.Body)
+
+		err = multierr.Append(err, err)
+
+		if err := os.Remove(cacheFilePath); err != nil {
+			err = multierr.Append(err, err)
+			c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": err.Error(),
+			})
+		}
 
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
 			"url":                  url,
@@ -205,6 +219,7 @@ func setupRouter() *gin.Engine {
 			"lintingProblems":      problems,
 			"resultCardinality":    stats,
 			"totalMetrics":         total,
+			"error":                err,
 		})
 
 	})

@@ -93,7 +93,7 @@
 
   <h1>Prometheus Metrics Endpoint Analyzer</h1>
 
-  <form action="/analyze" method="post">
+  <form action="/analyze" method="post" enctype="application/x-www-form-urlencoded">
       URL: <input type="text" name="url"><br>
       <input type="submit" value="Submit">
   </form>
