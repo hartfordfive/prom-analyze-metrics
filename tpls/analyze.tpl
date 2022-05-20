@@ -124,7 +124,8 @@
           </tr>
           {{- end }}
           </table>
-    </p>
+    </p><br/>
+    <a href="/analyze">Check Another Endpoint</a>
    </div>
 
    <hr/>
