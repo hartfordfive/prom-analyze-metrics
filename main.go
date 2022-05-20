@@ -193,7 +193,7 @@ func setupRouter() *gin.Engine {
 			}
 		}
 
-		//_, buffer = readCacheFile(cacheFilePath)
+		_, buffer = readCacheFile(cacheFilePath)
 		resp.Body = ioutil.NopCloser(buffer)
 
 		stats, total, err := checkExtended(resp.Body)
