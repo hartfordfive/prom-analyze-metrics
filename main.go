@@ -245,7 +245,7 @@ func getContents(url string) (*http.Response, error) {
 		log.Fatalln(err)
 	}
 
-	req.Header.Set("User-Agent", "Prometheus Web Metric Analyzer/0.1.0")
+	req.Header.Set("User-Agent", "Prometheus Web Metric Verifier/0.1.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
