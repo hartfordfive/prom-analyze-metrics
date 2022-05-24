@@ -17,14 +17,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/testutil/promlint"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-	"go.uber.org/multierr"
 )
 
 const (
@@ -103,20 +101,19 @@ func setupRouter() *gin.Engine {
 	// Disable Console Color
 	gin.DisableConsoleColor()
 	r := gin.Default()
-	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
-			param.ClientIP,
-			param.TimeStamp.Format(time.RFC1123),
-			param.Method,
-			param.Path,
-			param.Request.Proto,
-			param.StatusCode,
-			param.Latency,
-			param.Request.UserAgent(),
-			param.ErrorMessage,
-		)
-	}))
+
+	r.RedirectTrailingSlash = false // not default
+	r.RedirectFixedPath = false
+	r.HandleMethodNotAllowed = false
+	r.ForwardedByClientIP = true
+
+	// https://golang.org/src/net/url/url.go
+	r.UseRawPath = false
+	r.UnescapePathValues = true
+
+	r.Use(JsonLogger())
 	//r.Delims("{[{", "}]}")
+
 	r.SetFuncMap(template.FuncMap{
 		"floatToPercentage": floatToPercentage,
 		"bytesToHuman":      bytesToHuman,
@@ -137,7 +134,7 @@ func setupRouter() *gin.Engine {
 
 	r.POST("/analyze", func(c *gin.Context) {
 
-		var err error
+		var errors []string
 
 		//url := c.Query("url")
 		url := c.PostForm("url")
@@ -153,30 +150,37 @@ func setupRouter() *gin.Engine {
 			})
 		}
 
-		contentFileName := fmt.Sprintf("%x_%s:%s.prom", md5.Sum([]byte(url)), u.Hostname(), u.Port())
+		contentFileName := fmt.Sprintf("%x_%s.prom", md5.Sum([]byte(url)), u.Hostname())
 		cacheFilePath := filepath.Join(flagCacheDir, contentFileName)
 
 		err = os.MkdirAll(flagCacheDir, os.ModePerm)
 		if err != nil {
+			errors = append(errors, err.Error())
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
-				"error": err,
+				"error": errors,
 			})
 		}
+
 		out, err := os.Create(cacheFilePath)
 		if err != nil {
+			errors = append(errors, err.Error())
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
-				"error": err,
+				"error": errors,
 			})
+			return
 		}
 		defer out.Close()
 		nBytes, err := io.Copy(out, resp.Body)
+
 		if err != nil {
+			errors = append(errors, err.Error())
 			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
 				"url":   url,
-				"error": err,
+				"error": errors,
 			})
+			return
 		}
 
 		_, buffer := readCacheFile(cacheFilePath)
@@ -184,19 +188,31 @@ func setupRouter() *gin.Engine {
 
 		problems, err := checkMetricsLint(resp.Body)
 		if err != nil {
-			if err := os.Remove(cacheFilePath); err != nil {
-				err = multierr.Append(err, err)
-				c.HTML(http.StatusOK, "analyze.tpl", gin.H{
-					"url":   url,
-					"error": err.Error(),
-				})
+			errors = append(errors, err.Error())
+			// Remove metrics cache file if present
+			if fileExists(cacheFilePath) {
+				if err := os.Remove(cacheFilePath); err != nil {
+					errors = append(errors, err.Error())
+				}
 			}
+
+		}
+
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
+				"url":   url,
+				"error": errors,
+			})
+			return
 		}
 
 		_, buffer = readCacheFile(cacheFilePath)
 		resp.Body = ioutil.NopCloser(buffer)
 
 		stats, total, err := checkExtended(resp.Body)
+		if err != nil {
+			errors = append(errors, err.Error())
+		}
 
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
 			"url":                  url,
@@ -205,11 +221,19 @@ func setupRouter() *gin.Engine {
 			"lintingProblems":      problems,
 			"resultCardinality":    stats,
 			"totalMetrics":         total,
+			"error":                errors,
 		})
 
 	})
 
 	return r
+}
+
+func fileExists(filePath string) bool {
+	if _, error := os.Stat(filePath); os.IsNotExist(error) {
+		return false
+	}
+	return true
 }
 
 func getContents(url string) (*http.Response, error) {

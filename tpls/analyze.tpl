@@ -90,22 +90,30 @@
     <h1>Prometheus Metrics Endpoint Summary</h1>
     <p class="lead" style="text-align: left; font-size: 1.2em;">
         <table>
+          {{- if .url }}
           <tr>
             <td>Target</td>
             <td><strong>{{ .url }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .transferSize }}
           <tr>
             <td>Transfer Size</td>
             <td><strong>{{ bytesToHuman .transferSize }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .totalLintingProblems }}
           <tr>
             <td>Total linting warnings</td>
             <td><strong>{{ .totalLintingProblems }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .totalMetrics }}
           <tr>
             <td>Total metrics</td>
             <td><strong>{{ .totalMetrics }}</strong></td>
           </tr>
+          {{- end }}
           {{- if .resultCardinality }}
           <tr>
             {{ $topMetric := index .resultCardinality 0 }}
@@ -118,7 +126,7 @@
             <td>Errors</td>
             <td>
             {{- range $key, $err := .error }}
-            {{ $err }}
+            {{ $err }}<br/>
             {{- end }}
             </td>
           </tr>

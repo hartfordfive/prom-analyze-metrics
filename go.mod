@@ -1,4 +1,4 @@
-module github.com/hartfordfive/prom-analyze-metrics
+module github.com/hartfordfive/prom-metrics-verifier
 
 go 1.15
 
