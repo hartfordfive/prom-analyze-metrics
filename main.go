@@ -100,6 +100,7 @@ func readCacheFile(filename string) (byteCount int, buffer *bytes.Buffer) {
 func setupRouter() *gin.Engine {
 	// Disable Console Color
 	gin.DisableConsoleColor()
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	r.RedirectTrailingSlash = false // not default
@@ -128,26 +129,24 @@ func setupRouter() *gin.Engine {
 		c.String(http.StatusOK, "OK")
 	})
 
-	r.GET("/analyze", func(c *gin.Context) {
+	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "analyze_get.tpl", gin.H{})
 	})
 
 	r.POST("/analyze", func(c *gin.Context) {
 
-		var errors []string
-
-		//url := c.Query("url")
 		url := c.PostForm("url")
 
 		resp, err := getContents(url)
+		if err != nil {
+			showError(c, url, err)
+			return
+		}
 
 		u, err := urlparse.Parse(url)
-
 		if err != nil {
-			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
-				"url":   url,
-				"error": err,
-			})
+			showError(c, url, err)
+			return
 		}
 
 		contentFileName := fmt.Sprintf("%x_%s.prom", md5.Sum([]byte(url)), u.Hostname())
@@ -155,31 +154,21 @@ func setupRouter() *gin.Engine {
 
 		err = os.MkdirAll(flagCacheDir, os.ModePerm)
 		if err != nil {
-			errors = append(errors, err.Error())
-			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
-				"url":   url,
-				"error": errors,
-			})
+			showError(c, url, err)
+			return
 		}
 
 		out, err := os.Create(cacheFilePath)
 		if err != nil {
-			errors = append(errors, err.Error())
-			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
-				"url":   url,
-				"error": errors,
-			})
+			showError(c, url, err)
 			return
 		}
-		defer out.Close()
-		nBytes, err := io.Copy(out, resp.Body)
 
+		defer out.Close()
+
+		nBytes, err := io.Copy(out, resp.Body)
 		if err != nil {
-			errors = append(errors, err.Error())
-			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
-				"url":   url,
-				"error": errors,
-			})
+			showError(c, url, err)
 			return
 		}
 
@@ -188,31 +177,22 @@ func setupRouter() *gin.Engine {
 
 		problems, err := checkMetricsLint(resp.Body)
 		if err != nil {
-			errors = append(errors, err.Error())
 			// Remove metrics cache file if present
 			if fileExists(cacheFilePath) {
 				if err := os.Remove(cacheFilePath); err != nil {
-					errors = append(errors, err.Error())
+					err = fmt.Errorf("%w; %w", err, err)
 				}
 			}
 
 		}
-
 		if err != nil {
-			c.HTML(http.StatusBadRequest, "analyze.tpl", gin.H{
-				"url":   url,
-				"error": errors,
-			})
+			showError(c, url, err)
 			return
 		}
 
 		_, buffer = readCacheFile(cacheFilePath)
 		resp.Body = ioutil.NopCloser(buffer)
-
 		stats, total, err := checkExtended(resp.Body)
-		if err != nil {
-			errors = append(errors, err.Error())
-		}
 
 		c.HTML(http.StatusOK, "analyze.tpl", gin.H{
 			"url":                  url,
@@ -221,8 +201,9 @@ func setupRouter() *gin.Engine {
 			"lintingProblems":      problems,
 			"resultCardinality":    stats,
 			"totalMetrics":         total,
-			"error":                errors,
+			"error":                err,
 		})
+		return
 
 	})
 
@@ -236,6 +217,13 @@ func fileExists(filePath string) bool {
 	return true
 }
 
+func showError(c *gin.Context, url string, err error) {
+	c.HTML(http.StatusOK, "analyze.tpl", gin.H{
+		"url":   url,
+		"error": err,
+	})
+}
+
 func getContents(url string) (*http.Response, error) {
 
 	client := &http.Client{}
@@ -246,15 +234,15 @@ func getContents(url string) (*http.Response, error) {
 	}
 
 	req.Header.Set("User-Agent", "Prometheus Web Metric Verifier/0.1.0")
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status error: %v", resp.StatusCode)
+		return resp, fmt.Errorf("Response error: %v", resp.Status)
 	}
+
 	return resp, nil
 
 }
