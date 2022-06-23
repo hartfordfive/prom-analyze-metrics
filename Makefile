@@ -3,7 +3,7 @@ GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
-BASE_NAME=prom-metrics-verifier
+BASE_NAME=prom-metrics-analyzer
 GO_DEP_FETCH=go mod vendor 
 UNAME=$(shell uname)
 BUILD_DIR=build/
@@ -26,20 +26,21 @@ endif
 
 all: cleanall build-all
 
-# Cross compilation
+.PHONY: build
 build:
-	CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w -X $(PACKAGE_BASE)/version.CommitHash=$(GITHASH) -X $(PACKAGE_BASE)/version.BuildDate=$(BUILDDATE) -X $(PACKAGE_BASE)/version.Version=$(VERSION)" -o ${BUILD_DIR}$(BINARY_NAME) -v
+	CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w" -o ${BUILD_DIR}$(BINARY_NAME) -v
 
+# Build for multiple platforms
 build-all:
-	CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w -X $(PACKAGE_BASE)/version.CommitHash=$(GITHASH) -X $(PACKAGE_BASE)/version.BuildDate=$(BUILDDATE) -X ${PACKAGE_BASE}/version.Version=${VERSION}" -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-linux-$(ARCH) -v
-	CGO_ENABLED=0 GOOS=darwin GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w -X $(PACKAGE_BASE)/version.CommitHash=$(GITHASH) -X $(PACKAGE_BASE)/version.BuildDate=$(BUILDDATE) -X ${PACKAGE_BASE}/version.Version=${VERSION}" -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-darwin-$(ARCH) -v
+	CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w" -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-linux-$(ARCH) -v
+	CGO_ENABLED=0 GOOS=darwin GOARCH=${ARCH} $(GOBUILD) -ldflags "-s -w" -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-darwin-$(ARCH) -v
 
 build-release: all
 	tar -cvzf ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-linux-$(ARCH).tar.gz ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-linux-$(ARCH)
 	tar -cvzf ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-darwin-$(ARCH).tar.gz ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-darwin-$(ARCH)
 
 build-debug:
-	CGO_ENABLED=0 GOOS=${OS} GOARCH=amd64 $(GOBUILD) -ldflags "-X $(PACKAGE_BASE)/version.CommitHash=$(GITHASH) -X $(PACKAGE_BASE)/version.BuildDate=${BUILDDATE} -X ${PACKAGE_BASE}/version.Version=${VERSION}" -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-${OS}-$(ARCH)-debug -v
+	CGO_ENABLED=0 GOOS=${OS} GOARCH=amd64 $(GOBUILD) -o ${BUILD_DIR}$(BASE_NAME)-$(VERSION)-${OS}-$(ARCH)-debug -v
 
 test: 
 	$(GOTEST) -v ./...
@@ -53,6 +54,4 @@ cleanall: clean
 run:
 	$(GOBUILD) -a -o ${BUILD_DIR}$(BINARY_NAME) -v ./...
 	./${BUILD_DIR}$(BINARY_NAME)
-
-
 

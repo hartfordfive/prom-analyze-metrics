@@ -1,4 +1,4 @@
-# Prometheus metrics verifier
+# Prometheus metrics analyzer
 
 
 ### Description
@@ -10,14 +10,14 @@ Please note this was developped relatively quickly as a test and proof of concep
 ### Building
 
 ```
-make -B
+make build
 ```
 
 
 ### Running
 
 ```
-prom-metrics-verifier -port=8080 -cachedir=/tmp/prom-analyzer
+prom-metrics-analyzer -port=8080 -cachedir=/tmp/prom-analyzer
 ```
 Run with `-h` flag for list of all flags.
 

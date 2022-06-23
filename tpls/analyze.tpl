@@ -9,9 +9,6 @@
 
     <title>Prometheus Metric Analyzer</title>
 
-    <!-- Custom styles for this template -->
-    <link href="navbar-top-fixed.css" rel="stylesheet">
-
     <!-- Latest compiled and minified CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
 
@@ -90,22 +87,30 @@
     <h1>Prometheus Metrics Endpoint Summary</h1>
     <p class="lead" style="text-align: left; font-size: 1.2em;">
         <table>
+          {{- if .url }}
           <tr>
             <td>Target</td>
             <td><strong>{{ .url }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .transferSize }}
           <tr>
             <td>Transfer Size</td>
             <td><strong>{{ bytesToHuman .transferSize }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .totalLintingProblems }}
           <tr>
             <td>Total linting warnings</td>
             <td><strong>{{ .totalLintingProblems }}</strong></td>
           </tr>
+          {{- end }}
+          {{- if .totalMetrics }}
           <tr>
             <td>Total metrics</td>
             <td><strong>{{ .totalMetrics }}</strong></td>
           </tr>
+          {{- end }}
           {{- if .resultCardinality }}
           <tr>
             {{ $topMetric := index .resultCardinality 0 }}
@@ -117,15 +122,13 @@
           <tr>
             <td>Errors</td>
             <td>
-            {{- range $key, $err := .error }}
-            {{ $err }}
-            {{- end }}
+            {{ .error }}<br/>
             </td>
           </tr>
           {{- end }}
           </table>
     </p><br/>
-    <a href="/analyze">Check Another Endpoint</a>
+    <a href="/">Check Another Endpoint</a>
    </div>
 
    <hr/>
